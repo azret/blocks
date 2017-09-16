@@ -2,6 +2,9 @@
 using System.ComponentModel;
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 
 public static unsafe class Blocks
 {
@@ -348,7 +351,7 @@ public static unsafe class Blocks
             out int lpNumberOfBytesRead,
             void* overlapped);
 
-    public unsafe static void Append(string file, Block* src)
+    public unsafe static void Append(string file, Block* src, int retry = 256)
     {
         System.IntPtr hFile = System.IntPtr.Zero;
 
@@ -364,10 +367,22 @@ public static unsafe class Blocks
 
         try
         {
+            int error;
+
             if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
             {
                 const uint GENERIC_READ = 0x80000000;
                 const uint GENERIC_WRITE = 0x40000000;
+
+                if (retry <= 0 || retry > 256)
+                {
+                    retry = 1;
+                }
+
+                retry = int.MaxValue;
+
+L0:
+                retry--;
 
                 hFile = CreateFile(
                           file,
@@ -380,12 +395,21 @@ public static unsafe class Blocks
 
                 if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
                 {
-                    throw new Win32Exception(GetLastError());
+                    error = GetLastError();
+
+                    if (error == 32)
+                    {
+                        if (retry > 0)
+                        {
+                            Thread.Sleep(0);
+                            goto L0;
+                        }
+                    }
+
+                    throw new Win32Exception();
                 }
             }
-
-            int error;
-
+            
             long size = SetFilePointer(hFile, 0, SEEK.FROM_END, out error);
 
             if (error != 0)
@@ -397,7 +421,7 @@ public static unsafe class Blocks
 
             if (src->no != count)
             {
-                throw new ArgumentException("Invalid block.");
+                throw new ArgumentException("Invalid block.", "no");
             }
 
             long end = SetFilePointer(hFile, -1024, SEEK.FROM_END, out error);
@@ -431,7 +455,7 @@ public static unsafe class Blocks
             {
                 if (!IsValid(src, previous.hash))
                 {
-                    throw new ArgumentException("Invalid genesis block.");
+                    throw new ArgumentException("Invalid block.");
                 }
             }
 
@@ -476,7 +500,7 @@ public static unsafe class Blocks
 
                 hFile = CreateFile(
                           file,
-                          GENERIC_READ | GENERIC_WRITE,
+                          GENERIC_READ,
                           0x00000001 | 0x00000002 /* FILE_SHARE_READ | FILE_SHARE_WRITE */,
                           null,
                           0x04 /* OPEN_ALWAYS */,
@@ -499,12 +523,7 @@ public static unsafe class Blocks
             }
 
             long count = size / 1024;
-
-            if (dst->no != count)
-            {
-                throw new ArgumentException("Invalid block.");
-            }
-
+  
             long end = SetFilePointer(hFile, -1024, SEEK.FROM_END, out error);
 
             if (error != 0 && 131 != error)
@@ -586,25 +605,46 @@ public static unsafe class Blocks
     {
         string FILE = "Genesis";
 
-        Block LatestBlock;
-
-        GetLatestBlock(FILE, &LatestBlock);
-
-        if (IsGenesis(&LatestBlock) && IsValid(&LatestBlock, null))
+        Parallel.For(0, 1024, (i) => 
         {
-            Append(FILE, &LatestBlock);
+            Block LatestBlock;
 
-            Print(LatestBlock);
-        }
+            GetLatestBlock(FILE, &LatestBlock);
 
-        for (var i = 0; i < 1024; i++)
-        {
+            if (IsGenesis(&LatestBlock) && IsValid(&LatestBlock, null))
+            {
+                try
+                {
+                    Append(FILE, &LatestBlock);
+                }
+                catch (ArgumentException e)
+                {
+                    if (e.ParamName == "no")
+                    {
+                        Console.WriteLine("Busy");
+                    }
+                }
+
+                Print(LatestBlock);
+            }
+
             LatestBlock = Create(&LatestBlock, Seed.Next(), Secret());
 
-            Append(FILE, &LatestBlock);
+            try
+            {
+                Append(FILE, &LatestBlock);
+            }
+            catch (ArgumentException e)
+            {
+                if (e.ParamName == "no")
+                {
+                    Console.WriteLine("Busy");
+                }
+            }
 
             Print(LatestBlock);
-        }
+
+        });
 
         System.Console.ReadKey();
     }

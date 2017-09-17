@@ -352,7 +352,7 @@ public static unsafe class Blocks
             out int lpNumberOfBytesRead,
             void* overlapped);
 
-    public unsafe static int TryAppendBlock(string file, Block* src, int retry = int.MaxValue)
+    public unsafe static int AppendBlock(string file, Block* src, int retry = int.MaxValue)
     {
         System.IntPtr hFile = System.IntPtr.Zero;
 
@@ -366,7 +366,7 @@ public static unsafe class Blocks
             throw new System.ArgumentNullException("file", "File name is not specified.");
         }
 
-        int numberOfTries = 0;
+        int @try = 0;
 
         try
         {
@@ -375,9 +375,11 @@ public static unsafe class Blocks
             const uint GENERIC_READ = 0x80000000;
             const uint GENERIC_WRITE = 0x40000000;
 
+            /* Obtain an exclusive write lock on a file */
+
             while (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
             {
-                numberOfTries++;
+                @try++;
 
                 hFile = CreateFile(
                       file,
@@ -392,7 +394,7 @@ public static unsafe class Blocks
                 {
                     error = GetLastError();
 
-                    if (error == 32 && numberOfTries < retry)
+                    if (error == 32 && @try < retry)
                     {
                         Thread.Sleep(0);
                         continue;
@@ -423,9 +425,9 @@ public static unsafe class Blocks
                 throw new Win32Exception(error);
             }
 
-            Block previous; int read = 0;
+            Block comparand; int read = 0;
 
-            bool ok = ReadFile(hFile, (byte*)(&previous), 1024, out read, null);
+            bool ok = ReadFile(hFile, (byte*)(&comparand), 1024, out read, null);
 
             if (!ok)
             {
@@ -445,10 +447,10 @@ public static unsafe class Blocks
             }
             else
             {
-                if (!IsValidBlock(src, previous.hash))
+                if (!IsValidBlock(src, comparand.hash))
                 {
                     return -2;
-                }
+                }                
             }
 
             int bytesWritten = 0;
@@ -458,9 +460,9 @@ public static unsafe class Blocks
                 throw new Win32Exception(GetLastError());
             }
 
-            Debug.Assert(numberOfTries > 0);
+            Debug.Assert(@try > 0);
 
-            return numberOfTries;
+            return @try;
 
         }
         finally
@@ -474,7 +476,7 @@ public static unsafe class Blocks
         }
     }
 
-    public unsafe static bool TryGetLatestBlock(string file, Block* dst)
+    public unsafe static bool GetLatestBlock(string file, Block* dst)
     {
         System.IntPtr hFile = System.IntPtr.Zero;
 
@@ -676,32 +678,37 @@ L0:
     {
         string FILE = "Genesis";
 
+        Block GenesisBlock;
+
+        // Create a new file if needed ...
+
+        if (!GetLatestBlock(FILE, &GenesisBlock))
+        {
+            GenesisBlock = CreateBlock(0, Genesis, Seed.Next(), null);
+
+            Debug.Assert(IsGenesis(&GenesisBlock));
+
+            if (AppendBlock(FILE, &GenesisBlock) <= 0)
+            {
+                Console.Error?.WriteLine("Could not create genesis block.");
+            }
+        }
+
         // Generate new blocks ...
 
         Parallel.For(0, 1024, (i) =>
         {
             Block LatestBlock;
 
-            if (!TryGetLatestBlock(FILE, &LatestBlock))
+            if (GetLatestBlock(FILE, &LatestBlock))
             {
-                var GenesisBlock = CreateBlock(0, Genesis, Seed.Next(), null);
+                var NewBlock = CreateBlock(LatestBlock.no + 1, LatestBlock.GetHash(), Nonce(), Data());
 
-                Debug.Assert(IsGenesis(&GenesisBlock));
-
-                if (TryAppendBlock(FILE, &GenesisBlock) <= 0)
+                if (AppendBlock(FILE, &NewBlock) <= 0)
                 {
                     // Try again ...
                 }
-
-                LatestBlock = GenesisBlock;
-            }
-
-            var NewBlock = CreateBlock(&LatestBlock, Nonce(), Data());
-
-            if (TryAppendBlock(FILE, &NewBlock) <= 0)
-            {
-                // Try again ...
-            }
+            }            
         });
 
         // Check data consistency ...

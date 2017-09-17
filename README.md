@@ -10,32 +10,23 @@ A blockchain data structure implementation in C# w/ data persistence.
 ```csharp
 Block LatestBlock;
 
-// Get the latest known block from disk ...
-
-if (!TryGetLatestBlock(FILE, &LatestBlock))
+if (GetLatestBlock(FILE, &LatestBlock))
 {
-    // Start a new blockchain with a genesis block ...
+	// Compare and append semantics
 
-    var GenesisBlock = CreateBlock(0, Genesis, Nonce(), null);
+	var NewBlock = CreateBlock(&LatestBlock, Nonce(), Data());
 
-    if (TryAppendBlock(FILE, &GenesisBlock) <= 0)
-    {
-        // Try again ...
-    }
-}
-
-// Atomic compare and append semantics ...
-
-var NewBlock = CreateBlock(&LatestBlock, Nonce(), Data());
-
-if (TryAppendBlock(FILE, &NewBlock) <= 0)
-{
-    // Try again ...
+	if (AppendBlock(FILE, &NewBlock) <= 0)
+	{
+		// Try again
+	}
 }
 ```
 
 ## Links
 
 [The ABA Problem](https://en.wikipedia.org/wiki/ABA_problem)
+
+[Non-Blocking and Blocking Concurrent Algorithms](http://www.research.ibm.com/people/m/michael/podc-1996.pdf)
 
 Inpsired by - [A blockchain in 200 lines of code](https://medium.com/@lhartikk/a-blockchain-in-200-lines-of-code-963cc1cc0e54)

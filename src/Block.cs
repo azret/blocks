@@ -634,30 +634,35 @@ L0:
         }
     }
 
-    public static unsafe void Print(Block* block, TextWriter writer)
+    public static unsafe void Print(Block* src, TextWriter writer)
     {
-        writer.WriteLine($"Hash: {Hex(block->GetHash())}");
+        writer.WriteLine($"Hash: {Hex(src->GetHash())}");
 
-        writer.WriteLine($"Previous: {Hex(GetPreviousHash(block))}");
+        writer.WriteLine($"Previous: {Hex(GetPreviousHash(src))}");
 
-        if (block->len > 0)
+        if (src->len > 0)
         {
-            writer.WriteLine($"Data: {Hex(block->GetData())}");
+            writer.WriteLine($"Data: {Hex(src->GetData())}");
         }
 
-        int no = block->no;
+        int no = src->no;
 
         writer.WriteLine($"No: {no}");
 
-        var timestamp = block->timestamp;
+        var timestamp = src->timestamp;
 
         writer.WriteLine($"Timestamp: {(new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).AddSeconds(timestamp).ToLocalTime()}");
 
-        var nonce = block->nonce;
+        var nonce = src->nonce;
 
         writer.WriteLine($"Nonce: {nonce}");
 
-        writer.WriteLine($"Verified: {IsValidBlock(block, null)}");
+        writer.WriteLine($"Verified: {IsValidBlock(src, null)}");
+
+        if (IsGenesis(src))
+        {
+            writer.WriteLine($"Genesis: {true}");
+        }
 
         writer.WriteLine();
     }

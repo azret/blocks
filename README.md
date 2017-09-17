@@ -8,6 +8,8 @@
 A blockchain data structure implementation in C# w/ data persistence.
 
 ```csharp
+var FILE = "Genesis";
+
 Block LatestBlock;
 
 if (GetLatestBlock(FILE, &LatestBlock))

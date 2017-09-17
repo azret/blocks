@@ -1,6 +1,6 @@
-# Blocks - a blockchain database in C#
+# Blocks - Persistent blockchain in C#
 
-A blockchain implementation inspired by [naivechain](https://github.com/lhartikk/naivechain) with **data persistence**.
+A simple blockchain implementation inspired by [naivechain](https://github.com/lhartikk/naivechain) with **data persistence**.
 
 # What is a blockchain?
 
@@ -36,4 +36,4 @@ if (TryAppendBlock(FILE, &NewBlock) <= 0)
 ## Links
 
 [The ABA Problem](https://en.wikipedia.org/wiki/ABA_problem)
-[A blockchain in 200 lines of code](https://medium.com/@lhartikk/a-blockchain-in-200-lines-of-code-963cc1cc0e54)
+Inpsired by - [A blockchain in 200 lines of code](https://medium.com/@lhartikk/a-blockchain-in-200-lines-of-code-963cc1cc0e54)

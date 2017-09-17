@@ -696,7 +696,7 @@ L0:
 
         // Generate new blocks ...
 
-        Parallel.For(0, 1024, (i) =>
+        Parallel.For(0, 7, (i) =>
         {
             Block LatestBlock;
 

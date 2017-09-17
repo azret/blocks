@@ -25,6 +25,31 @@ if (GetLatestBlock(FILE, &LatestBlock))
 }
 ```
 
+```
+Hash: 68219427362a787082d283cfeaac6b76f46286f99a647b3550926b8aa83d8a54
+Previous: 81ddc8d248b2dccdd3fdd5e84f0cad62b08f2d10b57f9a831c13451e5c5c80a5
+No: 0
+Timestamp: 9/17/2017 1:52:09 AM
+Nonce: 1744414568
+Verified: True
+
+Hash: 261902ae45c85e0891692651fe8d5e679cd15ddbab0a435903e8ee43ee97f386
+Previous: 68219427362a787082d283cfeaac6b76f46286f99a647b3550926b8aa83d8a54
+Data: d0283dd36794ee3f
+No: 1
+Timestamp: 9/17/2017 1:52:09 AM
+Nonce: 1120141121
+Verified: True
+
+Hash: 845169a255484bebb6ff70506f2a5fd693b9afd8821ce5a15f66b3d08e340206
+Previous: 261902ae45c85e0891692651fe8d5e679cd15ddbab0a435903e8ee43ee97f386
+Data: 9fafa3a5cfd7e13f
+No: 2
+Timestamp: 9/17/2017 1:52:09 AM
+Nonce: 2029385099
+Verified: True
+```
+
 ## Links
 
 [The ABA Problem](https://en.wikipedia.org/wiki/ABA_problem)

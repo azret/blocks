@@ -1,6 +1,6 @@
-# Blocks - a blockchain implementation in C#
+# Blocks - a blockchain database in C#
 
-An blockchain implementation inspired by [naivechain](https://github.com/lhartikk/naivechain) with **atomic** block writes and **data persistence**.
+A blockchain implementation inspired by [naivechain](https://github.com/lhartikk/naivechain) with **data persistence**.
 
 # What is a blockchain?
 
@@ -9,7 +9,7 @@ An blockchain implementation inspired by [naivechain](https://github.com/lhartik
 ```csharp
 Block LatestBlock;
 
-// Get the latest known block *on disk* ...
+// Get the latest known block from disk ...
 
 if (!TryGetLatestBlock(FILE, &LatestBlock))
 {
@@ -23,7 +23,7 @@ if (!TryGetLatestBlock(FILE, &LatestBlock))
     }
 }
 
-// Atomic compare* & append ...
+// Atomic compare and append semantics ...
 
 var NewBlock = CreateBlock(&LatestBlock, Nonce(), Data());
 
@@ -35,4 +35,5 @@ if (TryAppendBlock(FILE, &NewBlock) <= 0)
 
 ## Links
 
+[The ABA Problem](https://en.wikipedia.org/wiki/ABA_problem)
 [A blockchain in 200 lines of code](https://medium.com/@lhartikk/a-blockchain-in-200-lines-of-code-963cc1cc0e54)

@@ -1,11 +1,11 @@
-# Blocks
-
-A blockchain data structure implementation in C# w/ data persistence.
-
-
 # What is a blockchain?
 
 [From Wikipedia](https://en.wikipedia.org/wiki/Blockchain) : A blockchain is a distributed database that maintains a continuously-growing list of records called blocks secured from tampering and revision.
+
+
+# Blocks
+
+A blockchain data structure implementation in C# w/ data persistence.
 
 ```csharp
 Block LatestBlock;

@@ -1,8 +1,9 @@
 ﻿using System;
 using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -45,9 +46,9 @@ public static unsafe class Blocks
         /// </summary>
         public double timestamp; // 8 bytes
         /// <summary>
-        /// secret
+        /// data
         /// </summary>
-        public fixed byte secret[MAX];
+        public fixed byte data[MAX];
         /// <summary>
         /// GetHash()
         /// </summary>
@@ -64,9 +65,9 @@ public static unsafe class Blocks
             return tmp;
         }
         /// <summary>
-        /// GetSecret()
+        /// GetData()
         /// </summary>
-        public byte[] GetSecret()
+        public byte[] GetData()
         {
             var size = len;
             if (size > MAX)
@@ -74,7 +75,7 @@ public static unsafe class Blocks
                 size = MAX;
             }
             byte[] tmp = new byte[size];
-            fixed (byte* p = secret)
+            fixed (byte* p = data)
             {
                 for (var i = 0; i < size; i++)
                 {
@@ -107,7 +108,7 @@ public static unsafe class Blocks
         return hex.ToString();
     }
 
-    public static unsafe byte[] GetPrevious(Block* block)
+    public static unsafe byte[] GetPreviousHash(Block* block)
     {
         byte[] tmp = new byte[32];
         byte* p = block->previous;
@@ -133,7 +134,7 @@ public static unsafe class Blocks
         }
     }
 
-    public static unsafe byte[] Create(Block* src, bool unhash)
+    public static unsafe byte[] CreateBlock(Block* src, bool unhash)
     {
         byte[] buf = new byte[1024];
         Block tmp = *src;
@@ -158,7 +159,7 @@ public static unsafe class Blocks
         return buf;
     }
 
-    public static unsafe Block Create(byte[] block)
+    public static unsafe Block CreateBlock(byte[] block)
     {
         Block tmp = new Block();
         fixed (byte* p = block)
@@ -172,7 +173,7 @@ public static unsafe class Blocks
         return tmp;
     }
 
-    public static unsafe Block Create(int no, byte[] previous, int nonce, byte[] data)
+    public static unsafe Block CreateBlock(int no, byte[] previous, int nonce, byte[] data)
     {
         if (previous.Length != 32)
         {
@@ -203,13 +204,13 @@ public static unsafe class Blocks
 
             fixed (byte* p = data)
             {
-                Copy(block.secret, p, block.len);
+                Copy(block.data, p, block.len);
             }
         }
 
         block.timestamp = (int)t.TotalSeconds;
 
-        byte[] hash = Sign(Create(&block, false));
+        byte[] hash = Sign(CreateBlock(&block, false));
 
         fixed (byte* p = hash)
         {
@@ -237,7 +238,7 @@ public static unsafe class Blocks
         return true;
     }
 
-    public static unsafe bool IsValid(Block* src, byte* previous)
+    public static unsafe bool IsValidBlock(Block* src, byte* previous)
     {
         if (src == null)
         {
@@ -246,14 +247,14 @@ public static unsafe class Blocks
 
         byte[] hash = src->GetHash();
 
-        if (!Compare(Sign(Create(src, true)), hash))
+        if (!Compare(Sign(CreateBlock(src, true)), hash))
         {
             return false;
         }
 
         if (previous != null)
         {
-            if (!Compare(GetPrevious(src), previous))
+            if (!Compare(GetPreviousHash(src), previous))
             {
                 return false;
             }
@@ -264,7 +265,7 @@ public static unsafe class Blocks
 
     public static unsafe bool IsGenesis(Block* src)
     {
-        if (Compare(GetPrevious(src), Genesis))
+        if (Compare(GetPreviousHash(src), Genesis))
         {
             return true;
         }
@@ -272,15 +273,15 @@ public static unsafe class Blocks
         return false;
     }
 
-    public static unsafe Block Create(Block* previous, int nonce, byte[] data)
+    public static unsafe Block CreateBlock(Block* previous, int nonce, byte[] data)
     {
-        return Create(previous->no + 1, previous->GetHash(), nonce, data);
+        return CreateBlock(previous->no + 1, previous->GetHash(), nonce, data);
     }
     
-    public static IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
+    static IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
 
     [StructLayout(LayoutKind.Sequential)]
-    public class SECURITY_ATTRIBUTES
+    class SECURITY_ATTRIBUTES
     {
         internal int nLength;
         internal unsafe byte* pSecurityDescriptor;
@@ -289,14 +290,14 @@ public static unsafe class Blocks
 
     [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
     [DllImport("Kernel32.dll", SetLastError = false)]
-    public static extern int GetLastError();
+    static extern int GetLastError();
 
     [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
     [DllImport("Kernel32.dll", SetLastError = false)]
-    public static extern void SetLastError(int lastError);
+    static extern void SetLastError(int lastError);
 
     [DllImport("Kernel32.dll", BestFitMapping = false, SetLastError = true, CharSet = CharSet.Unicode)]
-    public static extern IntPtr CreateFile(
+    static extern IntPtr CreateFile(
         String lpFileName,
         UInt32 dwDesiredAccess,
         UInt32 dwShareMode,
@@ -306,7 +307,7 @@ public static unsafe class Blocks
         IntPtr hTemplateFile);
 
     [DllImport("Kernel32.dll", SetLastError = true)]
-    internal unsafe static extern bool WriteFile(
+    unsafe static extern bool WriteFile(
         IntPtr hFile,
         IntPtr lpBuffer,
         int nNumberOfBytesToWrite,
@@ -314,7 +315,7 @@ public static unsafe class Blocks
         IntPtr lpOverlapped);
 
     [DllImport("Kernel32.dll", SetLastError = false)]
-    public static extern bool CloseHandle(
+    static extern bool CloseHandle(
          IntPtr hObject
     );
 
@@ -326,7 +327,7 @@ public static unsafe class Blocks
     }
 
     [DllImport("Kernel32.dll", SetLastError = true, EntryPoint = "SetFilePointer")]
-    private unsafe static extern int SetFilePointerWin32(IntPtr h_File, int lo, int* hi, uint origin);
+    unsafe static extern int SetFilePointerWin32(IntPtr h_File, int lo, int* hi, uint origin);
 
     internal unsafe static long SetFilePointer(IntPtr h_File, long offset, SEEK seek, out int hr)
     {
@@ -344,14 +345,14 @@ public static unsafe class Blocks
     }
 
     [DllImport("Kernel32.dll", SetLastError = true)]
-    internal unsafe static extern bool ReadFile(
+    unsafe static extern bool ReadFile(
             IntPtr hFile,
             byte* lpBuffer,
             int nNumberOfBytesToRead,
             out int lpNumberOfBytesRead,
             void* overlapped);
 
-    public unsafe static void Append(string file, Block* src, int retry = 256)
+    public unsafe static int TryAppendBlock(string file, Block* src, int retry = int.MaxValue)
     {
         System.IntPtr hFile = System.IntPtr.Zero;
 
@@ -365,51 +366,42 @@ public static unsafe class Blocks
             throw new System.ArgumentNullException("file", "File name is not specified.");
         }
 
+        int numberOfTries = 0;
+
         try
         {
             int error;
 
-            if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+            const uint GENERIC_READ = 0x80000000;
+            const uint GENERIC_WRITE = 0x40000000;
+
+            while (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
             {
-                const uint GENERIC_READ = 0x80000000;
-                const uint GENERIC_WRITE = 0x40000000;
-
-                if (retry <= 0 || retry > 256)
-                {
-                    retry = 1;
-                }
-
-                retry = int.MaxValue;
-
-L0:
-                retry--;
+                numberOfTries++;
 
                 hFile = CreateFile(
-                          file,
-                          GENERIC_READ | GENERIC_WRITE,
-                          0x00000001 /* FILE_SHARE_READ */,
-                          null,
-                          0x04 /* OPEN_ALWAYS */,
-                          0x00000080 /* FILE_ATTRIBUTE_NORMAL */,
-                          IntPtr.Zero);
+                      file,
+                      GENERIC_READ | GENERIC_WRITE,
+                      0x00000001 /* FILE_SHARE_READ */,
+                      null,
+                      0x04 /* OPEN_ALWAYS */,
+                      0x00000080 /* FILE_ATTRIBUTE_NORMAL */,
+                      IntPtr.Zero);
 
                 if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
                 {
                     error = GetLastError();
 
-                    if (error == 32)
+                    if (error == 32 && numberOfTries < retry)
                     {
-                        if (retry > 0)
-                        {
-                            Thread.Sleep(0);
-                            goto L0;
-                        }
+                        Thread.Sleep(0);
+                        continue;
                     }
 
                     throw new Win32Exception();
                 }
             }
-            
+
             long size = SetFilePointer(hFile, 0, SEEK.FROM_END, out error);
 
             if (error != 0)
@@ -421,7 +413,7 @@ L0:
 
             if (src->no != count)
             {
-                throw new ArgumentException("Invalid block.", "no");
+                return -1;
             }
 
             long end = SetFilePointer(hFile, -1024, SEEK.FROM_END, out error);
@@ -442,7 +434,7 @@ L0:
 
             if (read == 0)
             {
-                if (!IsValid(src, null) || !IsGenesis(src))
+                if (!IsValidBlock(src, null) || !IsGenesis(src))
                 {
                     throw new ArgumentException("Invalid genesis block.");
                 }
@@ -453,9 +445,9 @@ L0:
             }
             else
             {
-                if (!IsValid(src, previous.hash))
+                if (!IsValidBlock(src, previous.hash))
                 {
-                    throw new ArgumentException("Invalid block.");
+                    return -2;
                 }
             }
 
@@ -465,6 +457,11 @@ L0:
             {
                 throw new Win32Exception(GetLastError());
             }
+
+            Debug.Assert(numberOfTries > 0);
+
+            return numberOfTries;
+
         }
         finally
         {
@@ -477,7 +474,7 @@ L0:
         }
     }
 
-    public unsafe static bool GetLatestBlock(string file, Block* dst)
+    public unsafe static bool TryGetLatestBlock(string file, Block* dst)
     {
         System.IntPtr hFile = System.IntPtr.Zero;
 
@@ -542,8 +539,7 @@ L0:
 
             if (read == 0)
             {
-                *dst = Create(0, Sign(System.Text.Encoding.ASCII.GetBytes("Genesis")), Seed.Next(), Secret());
-                return true;
+                return false;
             }
             else if (read != 1024)
             {
@@ -566,84 +562,173 @@ L0:
         }
     }
 
-    public static unsafe void Print(Block block)
+    public unsafe static bool Map(string file, Action<IntPtr> body)
     {
-        System.Console.WriteLine($"Hash: {Hex(block.GetHash())}");
+        System.IntPtr hFile = System.IntPtr.Zero;
 
-        System.Console.WriteLine($"Previous: {Hex(GetPrevious(&block))}");
-
-        if (block.len > 0)
+        if (string.IsNullOrEmpty(file))
         {
-            System.Console.WriteLine($"Data: {Hex(block.GetSecret())}");
+            throw new System.ArgumentNullException("file", "File name is not specified.");
         }
 
-        int no = block.no;
+        try
+        {
+            if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+            {
+                const uint GENERIC_READ = 0x80000000;
 
-        System.Console.WriteLine($"No: {no}");
+                hFile = CreateFile(
+                          file,
+                          GENERIC_READ,
+                          0x00000001 | 0x00000002 /* FILE_SHARE_READ | FILE_SHARE_WRITE */,
+                          null,
+                          0x04 /* OPEN_ALWAYS */,
+                          0x00000080 /* FILE_ATTRIBUTE_NORMAL */,
+                          IntPtr.Zero);
 
-        var timestamp = block.timestamp;
+                if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+                {
+                    throw new Win32Exception(GetLastError());
+                }
+            }
+            
+L0:
+            Block previous; int read = 0;
 
-        System.Console.WriteLine($"Timestamp: {(new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).AddSeconds(timestamp).ToLocalTime()}");
+            bool ok = ReadFile(hFile, (byte*)(&previous), 1024, out read, null);
 
-        var nonce = block.nonce;
+            if (!ok)
+            {
+                throw new Win32Exception(GetLastError());
+            }
 
-        System.Console.WriteLine($"Nonce: {nonce}");
+            if (read == 0)
+            {
+                return false;
+            }
+            else if (read != 1024)
+            {
+                throw new ArgumentException("Invalid file.");
+            }
+            else
+            {
+                if (body != null)
+                {
+                    body(new IntPtr(&previous));
+                }
 
-        System.Console.WriteLine($"Verified: {IsValid(&block, null)}");
+                goto L0;
+            }
 
-        System.Console.WriteLine();
+        }
+        finally
+        {
+            if (hFile != IntPtr.Zero && hFile != INVALID_HANDLE_VALUE)
+            {
+                CloseHandle(hFile);
+
+                hFile = IntPtr.Zero;
+            }
+        }
+    }
+
+    public static unsafe void Print(Block* block, TextWriter writer)
+    {
+        writer.WriteLine($"Hash: {Hex(block->GetHash())}");
+
+        writer.WriteLine($"Previous: {Hex(GetPreviousHash(block))}");
+
+        if (block->len > 0)
+        {
+            writer.WriteLine($"Data: {Hex(block->GetData())}");
+        }
+
+        int no = block->no;
+
+        writer.WriteLine($"No: {no}");
+
+        var timestamp = block->timestamp;
+
+        writer.WriteLine($"Timestamp: {(new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).AddSeconds(timestamp).ToLocalTime()}");
+
+        var nonce = block->nonce;
+
+        writer.WriteLine($"Nonce: {nonce}");
+
+        writer.WriteLine($"Verified: {IsValidBlock(block, null)}");
+
+        writer.WriteLine();
     }
 
     public static System.Random Seed = new System.Random(7919);
 
-    static byte[] Secret()
+    static byte[] Data()
     {
         return System.BitConverter.GetBytes(Seed.NextDouble());
+    }
+
+    static int Nonce()
+    {
+        return Seed.Next();
     }
 
     public static unsafe void Main(string[] args)
     {
         string FILE = "Genesis";
 
-        Parallel.For(0, 1024, (i) => 
+        // Generate new blocks ...
+
+        Parallel.For(0, 1024, (i) =>
         {
             Block LatestBlock;
 
-            GetLatestBlock(FILE, &LatestBlock);
-
-            if (IsGenesis(&LatestBlock) && IsValid(&LatestBlock, null))
+            if (!TryGetLatestBlock(FILE, &LatestBlock))
             {
-                try
+                var GenesisBlock = CreateBlock(0, Genesis, Seed.Next(), null);
+
+                Debug.Assert(IsGenesis(&GenesisBlock));
+
+                if (TryAppendBlock(FILE, &GenesisBlock) <= 0)
                 {
-                    Append(FILE, &LatestBlock);
-                }
-                catch (ArgumentException e)
-                {
-                    if (e.ParamName == "no")
-                    {
-                        Console.WriteLine("Busy");
-                    }
+                    // Try again ...
                 }
 
-                Print(LatestBlock);
+                LatestBlock = GenesisBlock;
             }
 
-            LatestBlock = Create(&LatestBlock, Seed.Next(), Secret());
+            var NewBlock = CreateBlock(&LatestBlock, Nonce(), Data());
 
-            try
+            if (TryAppendBlock(FILE, &NewBlock) <= 0)
             {
-                Append(FILE, &LatestBlock);
+                // Try again ...
             }
-            catch (ArgumentException e)
+        });
+
+        // Check data consistency ...
+
+        byte[] tmp = null;
+
+        Map(FILE, (i) => 
+        {
+            Block* b = (Block*)i;
+
+            fixed (byte * p = tmp)
             {
-                if (e.ParamName == "no")
+                if (IsValidBlock(b, p))
                 {
-                    Console.WriteLine("Busy");
+                    Console.ForegroundColor = ConsoleColor.Green;
+                }
+                else
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
                 }
             }
 
-            Print(LatestBlock);
+            Print(b, System.Console.Out);
 
+            Console.ResetColor();
+
+            tmp = b->GetHash();
         });
 
         System.Console.ReadKey();

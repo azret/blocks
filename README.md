@@ -14,14 +14,14 @@ Block LatestBlock;
 
 if (GetLatestBlock(FILE, &LatestBlock))
 {
-	// Compare and append semantics
+    // Compare and append semantics
 
-	var NewBlock = CreateBlock(&LatestBlock, Nonce(), Data());
+    var NewBlock = CreateBlock(&LatestBlock, Nonce(), Data());
 
-	if (AppendBlock(FILE, &NewBlock) <= 0)
-	{
-		// Try again
-	}
+    if (AppendBlock(FILE, &NewBlock) <= 0)
+    {
+        // Try again
+    }
 }
 ```
 

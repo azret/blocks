@@ -9,13 +9,90 @@ using System.Threading.Tasks;
 
 public static unsafe class Blocks
 {
+    internal static class Kernel
+    {
+        internal static IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal class SECURITY_ATTRIBUTES
+        {
+            internal int nLength;
+            internal unsafe byte* pSecurityDescriptor;
+            internal int bInheritHandle;
+        }
+
+        [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
+        [DllImport("Kernel32.dll", SetLastError = false)]
+        internal static extern int GetLastError();
+
+        [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
+        [DllImport("Kernel32.dll", SetLastError = false)]
+        internal static extern void SetLastError(int lastError);
+
+        [DllImport("Kernel32.dll", BestFitMapping = false, SetLastError = true, CharSet = CharSet.Unicode)]
+        internal static extern IntPtr CreateFile(
+            String lpFileName,
+            UInt32 dwDesiredAccess,
+            UInt32 dwShareMode,
+            SECURITY_ATTRIBUTES lpSecurityAttributes,
+            UInt32 dwCreationDisposition,
+            UInt32 dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
+
+        [DllImport("Kernel32.dll", SetLastError = true)]
+        internal unsafe static extern bool WriteFile(
+            IntPtr hFile,
+            IntPtr lpBuffer,
+            int nNumberOfBytesToWrite,
+            out int lpNumberOfBytesWritten,
+            IntPtr lpOverlapped);
+
+        [DllImport("Kernel32.dll", SetLastError = false)]
+        internal static extern bool CloseHandle(
+             IntPtr hObject
+        );
+
+        internal enum SEEK : uint
+        {
+            FROM_START = 0,
+            FROM_CURRENT = 1,
+            FROM_END = 2
+        }
+
+        [DllImport("Kernel32.dll", SetLastError = true, EntryPoint = "SetFilePointer")]
+        internal unsafe static extern int SetFilePointerWin32(IntPtr h_File, int lo, int* hi, uint origin);
+
+        internal unsafe static long SetFilePointer(IntPtr h_File, long offset, SEEK seek, out int hr)
+        {
+            hr = 0;
+
+            int lo = (int)offset;
+            int hi = (int)(offset >> 32);
+
+            lo = SetFilePointerWin32(h_File, lo, &hi, (uint)seek);
+
+            if (lo == -1 && ((hr = Marshal.GetLastWin32Error()) != 0))
+                return -1;
+
+            return (long)(((ulong)((uint)hi)) << 32) | ((uint)lo);
+        }
+
+        [DllImport("Kernel32.dll", SetLastError = true)]
+        internal unsafe static extern bool ReadFile(
+                IntPtr hFile,
+                byte* lpBuffer,
+                int nNumberOfBytesToRead,
+                out int lpNumberOfBytesRead,
+                void* overlapped);
+    }
+
     /// <summary>
-    /// Genesis
+    /// Hash of the Genesis block
     /// </summary>
     public static byte[] Genesis = Sign(System.Text.Encoding.ASCII.GetBytes("Genesis"));
 
     /// <summary>
-    /// Block
+    /// 1024 byte block structure
     /// </summary>
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1, Size = 1024)]
     public unsafe struct Block
@@ -278,80 +355,6 @@ public static unsafe class Blocks
         return CreateBlock(previous->no + 1, previous->GetHash(), nonce, data);
     }
     
-    static IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
-
-    [StructLayout(LayoutKind.Sequential)]
-    class SECURITY_ATTRIBUTES
-    {
-        internal int nLength;
-        internal unsafe byte* pSecurityDescriptor;
-        internal int bInheritHandle;
-    }
-
-    [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
-    [DllImport("Kernel32.dll", SetLastError = false)]
-    static extern int GetLastError();
-
-    [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
-    [DllImport("Kernel32.dll", SetLastError = false)]
-    static extern void SetLastError(int lastError);
-
-    [DllImport("Kernel32.dll", BestFitMapping = false, SetLastError = true, CharSet = CharSet.Unicode)]
-    static extern IntPtr CreateFile(
-        String lpFileName,
-        UInt32 dwDesiredAccess,
-        UInt32 dwShareMode,
-        SECURITY_ATTRIBUTES lpSecurityAttributes,
-        UInt32 dwCreationDisposition,
-        UInt32 dwFlagsAndAttributes,
-        IntPtr hTemplateFile);
-
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    unsafe static extern bool WriteFile(
-        IntPtr hFile,
-        IntPtr lpBuffer,
-        int nNumberOfBytesToWrite,
-        out int lpNumberOfBytesWritten,
-        IntPtr lpOverlapped);
-
-    [DllImport("Kernel32.dll", SetLastError = false)]
-    static extern bool CloseHandle(
-         IntPtr hObject
-    );
-
-    public enum SEEK : uint
-    {
-        FROM_START = 0,
-        FROM_CURRENT = 1,
-        FROM_END = 2
-    }
-
-    [DllImport("Kernel32.dll", SetLastError = true, EntryPoint = "SetFilePointer")]
-    unsafe static extern int SetFilePointerWin32(IntPtr h_File, int lo, int* hi, uint origin);
-
-    internal unsafe static long SetFilePointer(IntPtr h_File, long offset, SEEK seek, out int hr)
-    {
-        hr = 0;
-
-        int lo = (int)offset;
-        int hi = (int)(offset >> 32);
-
-        lo = SetFilePointerWin32(h_File, lo, &hi, (uint)seek);
-
-        if (lo == -1 && ((hr = Marshal.GetLastWin32Error()) != 0))
-            return -1;
-
-        return (long)(((ulong)((uint)hi)) << 32) | ((uint)lo);
-    }
-
-    [DllImport("Kernel32.dll", SetLastError = true)]
-    unsafe static extern bool ReadFile(
-            IntPtr hFile,
-            byte* lpBuffer,
-            int nNumberOfBytesToRead,
-            out int lpNumberOfBytesRead,
-            void* overlapped);
-
     public unsafe static int AppendBlock(string file, Block* src, int retry = int.MaxValue)
     {
         System.IntPtr hFile = System.IntPtr.Zero;
@@ -377,11 +380,11 @@ public static unsafe class Blocks
 
             /* Obtain an exclusive write lock on a file */
 
-            while (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+            while (hFile == IntPtr.Zero || hFile == Kernel.INVALID_HANDLE_VALUE)
             {
                 @try++;
 
-                hFile = CreateFile(
+                hFile = Kernel.CreateFile(
                       file,
                       GENERIC_READ | GENERIC_WRITE,
                       0x00000001 /* FILE_SHARE_READ */,
@@ -390,9 +393,9 @@ public static unsafe class Blocks
                       0x00000080 /* FILE_ATTRIBUTE_NORMAL */,
                       IntPtr.Zero);
 
-                if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+                if (hFile == IntPtr.Zero || hFile == Kernel.INVALID_HANDLE_VALUE)
                 {
-                    error = GetLastError();
+                    error = Kernel.GetLastError();
 
                     if (error == 32 && @try < retry)
                     {
@@ -404,7 +407,7 @@ public static unsafe class Blocks
                 }
             }
 
-            long size = SetFilePointer(hFile, 0, SEEK.FROM_END, out error);
+            long size = Kernel.SetFilePointer(hFile, 0, Kernel.SEEK.FROM_END, out error);
 
             if (error != 0)
             {
@@ -418,7 +421,7 @@ public static unsafe class Blocks
                 return -1;
             }
 
-            long end = SetFilePointer(hFile, -1024, SEEK.FROM_END, out error);
+            long end = Kernel.SetFilePointer(hFile, -1024, Kernel.SEEK.FROM_END, out error);
 
             if (error != 0 && 131 != error)
             {
@@ -427,11 +430,11 @@ public static unsafe class Blocks
 
             Block comparand; int read = 0;
 
-            bool ok = ReadFile(hFile, (byte*)(&comparand), 1024, out read, null);
+            bool ok = Kernel.ReadFile(hFile, (byte*)(&comparand), 1024, out read, null);
 
             if (!ok)
             {
-                throw new Win32Exception(GetLastError());
+                throw new Win32Exception(Kernel.GetLastError());
             }
 
             if (read == 0)
@@ -455,9 +458,9 @@ public static unsafe class Blocks
 
             int bytesWritten = 0;
 
-            if (!WriteFile(hFile, new IntPtr(src), 1024, out bytesWritten, IntPtr.Zero))
+            if (!Kernel.WriteFile(hFile, new IntPtr(src), 1024, out bytesWritten, IntPtr.Zero))
             {
-                throw new Win32Exception(GetLastError());
+                throw new Win32Exception(Kernel.GetLastError());
             }
 
             Debug.Assert(@try > 0);
@@ -467,9 +470,9 @@ public static unsafe class Blocks
         }
         finally
         {
-            if (hFile != IntPtr.Zero && hFile != INVALID_HANDLE_VALUE)
+            if (hFile != IntPtr.Zero && hFile != Kernel.INVALID_HANDLE_VALUE)
             {
-                CloseHandle(hFile);
+                Kernel.CloseHandle(hFile);
 
                 hFile = IntPtr.Zero;
             }
@@ -492,12 +495,11 @@ public static unsafe class Blocks
 
         try
         {
-            if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+            if (hFile == IntPtr.Zero || hFile == Kernel.INVALID_HANDLE_VALUE)
             {
                 const uint GENERIC_READ = 0x80000000;
-                const uint GENERIC_WRITE = 0x40000000;
 
-                hFile = CreateFile(
+                hFile = Kernel.CreateFile(
                           file,
                           GENERIC_READ,
                           0x00000001 | 0x00000002 /* FILE_SHARE_READ | FILE_SHARE_WRITE */,
@@ -506,15 +508,15 @@ public static unsafe class Blocks
                           0x00000080 /* FILE_ATTRIBUTE_NORMAL */,
                           IntPtr.Zero);
 
-                if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+                if (hFile == IntPtr.Zero || hFile == Kernel.INVALID_HANDLE_VALUE)
                 {
-                    throw new Win32Exception(GetLastError());
+                    throw new Win32Exception(Kernel.GetLastError());
                 }
             }
 
             int error;
 
-            long size = SetFilePointer(hFile, 0, SEEK.FROM_END, out error);
+            long size = Kernel.SetFilePointer(hFile, 0, Kernel.SEEK.FROM_END, out error);
 
             if (error != 0)
             {
@@ -523,7 +525,7 @@ public static unsafe class Blocks
 
             long count = size / 1024;
   
-            long end = SetFilePointer(hFile, -1024, SEEK.FROM_END, out error);
+            long end = Kernel.SetFilePointer(hFile, -1024, Kernel.SEEK.FROM_END, out error);
 
             if (error != 0 && 131 != error)
             {
@@ -532,11 +534,11 @@ public static unsafe class Blocks
 
             Block previous; int read = 0;
 
-            bool ok = ReadFile(hFile, (byte*)(&previous), 1024, out read, null);
+            bool ok = Kernel.ReadFile(hFile, (byte*)(&previous), 1024, out read, null);
 
             if (!ok)
             {
-                throw new Win32Exception(GetLastError());
+                throw new Win32Exception(Kernel.GetLastError());
             }
 
             if (read == 0)
@@ -555,9 +557,9 @@ public static unsafe class Blocks
         }
         finally
         {
-            if (hFile != IntPtr.Zero && hFile != INVALID_HANDLE_VALUE)
+            if (hFile != IntPtr.Zero && hFile != Kernel.INVALID_HANDLE_VALUE)
             {
-                CloseHandle(hFile);
+                Kernel.CloseHandle(hFile);
 
                 hFile = IntPtr.Zero;
             }
@@ -575,11 +577,11 @@ public static unsafe class Blocks
 
         try
         {
-            if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+            if (hFile == IntPtr.Zero || hFile == Kernel.INVALID_HANDLE_VALUE)
             {
                 const uint GENERIC_READ = 0x80000000;
 
-                hFile = CreateFile(
+                hFile = Kernel.CreateFile(
                           file,
                           GENERIC_READ,
                           0x00000001 | 0x00000002 /* FILE_SHARE_READ | FILE_SHARE_WRITE */,
@@ -588,20 +590,20 @@ public static unsafe class Blocks
                           0x00000080 /* FILE_ATTRIBUTE_NORMAL */,
                           IntPtr.Zero);
 
-                if (hFile == IntPtr.Zero || hFile == INVALID_HANDLE_VALUE)
+                if (hFile == IntPtr.Zero || hFile == Kernel.INVALID_HANDLE_VALUE)
                 {
-                    throw new Win32Exception(GetLastError());
+                    throw new Win32Exception(Kernel.GetLastError());
                 }
             }
             
 L0:
             Block previous; int read = 0;
 
-            bool ok = ReadFile(hFile, (byte*)(&previous), 1024, out read, null);
+            bool ok = Kernel.ReadFile(hFile, (byte*)(&previous), 1024, out read, null);
 
             if (!ok)
             {
-                throw new Win32Exception(GetLastError());
+                throw new Win32Exception(Kernel.GetLastError());
             }
 
             if (read == 0)
@@ -625,9 +627,9 @@ L0:
         }
         finally
         {
-            if (hFile != IntPtr.Zero && hFile != INVALID_HANDLE_VALUE)
+            if (hFile != IntPtr.Zero && hFile != Kernel.INVALID_HANDLE_VALUE)
             {
-                CloseHandle(hFile);
+                Kernel.CloseHandle(hFile);
 
                 hFile = IntPtr.Zero;
             }

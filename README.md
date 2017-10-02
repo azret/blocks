@@ -5,7 +5,9 @@
 
 # Blocks
 
-A blockchain data structure implementation in C# w/ data persistence.
+A sample blockchain data structure implementation in C# w/ data persistence.
+
+
 
 ```csharp
 var FILE = "Genesis";
@@ -14,13 +16,13 @@ Block LatestBlock;
 
 if (GetLatestBlock(FILE, &LatestBlock))
 {
-    // Compare and append semantics
+    // compare and append semantics
 
     var NewBlock = CreateBlock(&LatestBlock, Nonce(), Data());
 
     if (AppendBlock(FILE, &NewBlock) <= 0)
     {
-        // Try again
+        // reject
     }
 }
 ```

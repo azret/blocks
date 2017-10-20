@@ -38,7 +38,7 @@ class App
 
                 if (AppendBlock(FILE, &NewBlock) <= 0)
                 {
-                    // Try again ...
+                    // Block is rejected. Try again.
                 }
             }
         });

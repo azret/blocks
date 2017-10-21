@@ -10,6 +10,13 @@ namespace Blocks
 
         static IDisposable _listener;
 
+        static void Write(string msg)
+        {
+            Console.ForegroundColor = ConsoleColor.Gray;
+            Console.Write(msg);
+            Console.ResetColor();
+        }
+
         static void Log(string msg)
         {
             Console.ForegroundColor = ConsoleColor.Gray;
@@ -38,23 +45,19 @@ namespace Blocks
                 throw new InvalidOperationException();
             }
 
-            Log($"Starting a new node on http://localhost:{port}");
-
             _listener = Microsoft.Owin.Hosting.WebApp.Start<TStartup>(url: $"http://+:{port}");
-
-            Log($"\r\nReady.");
         }
 
         public void Configuration(Owin.IAppBuilder host)
         {
             Owin.MapExtensions.Map(host, "/blocks", (app) =>
             {
-                app.Run((IOwinContext ctx) => { return Blocks.Serv.Blocks(ctx); });
+                app.Run((IOwinContext ctx) => { return Blocks.Serv.GetBlocks(ctx); });
             });
 
             Owin.MapExtensions.Map(host, string.Empty, (app) =>
             {
-                app.Run((IOwinContext ctx) => { return Blocks.Serv.Blocks(ctx); });
+                app.Run((IOwinContext ctx) => { return Blocks.Serv.GetLatestBlock(ctx); });
             });
         }
 
@@ -79,7 +82,7 @@ namespace Blocks
 
             Block block;
 
-            Log($"Validating database...\r\n");
+            Log($"Validating blockchain: {System.IO.Path.GetFileName(FILE)}\r\n");
 
             if (!Database.GetLatestBlock(FILE, &block))
             {
@@ -101,27 +104,11 @@ namespace Blocks
 
                 fixed (byte* p = previous)
                 {
-                    if (Database.IsValidBlock(b, p))
+                    if (!Database.IsValidBlock(b, p))
                     {
-                        Console.ForegroundColor = ConsoleColor.Green;
-
-                        if (p == null)
-                        {
-                            if (!Database.IsGenesis(b))
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        Console.ForegroundColor = ConsoleColor.Red;
+                        throw new System.IO.InvalidDataException();
                     }
                 }
-                /*
-                Database.Print(b, System.Console.Out);
-                */
-                Console.ResetColor();
 
                 previous = b->GetHash();
             });
@@ -130,13 +117,17 @@ namespace Blocks
             {
                 Error($"Could not get latest block.");
             }
-            
-            Database.Print(&block, System.Console.Out);
 
-            Log($"Done.\r\n");
+            Console.ForegroundColor = ConsoleColor.Green;
+
+            Utils.Print(&block, System.Console.Out);
+
+            Console.ResetColor();
 
             try
             {
+                Log($"Starting a new node");
+
                 Serv<App>(PORT);
             }
             catch (Exception e)
@@ -161,7 +152,11 @@ namespace Blocks
                     throw e;
                 }
             }
-            
+
+            Log($"\r\nReady.\r\n");
+
+            Yellow($"http://localhost:{PORT}");
+
             Log("\r\nPress any key to quit...\r\n");
 
             while (!ExitCode.HasValue)

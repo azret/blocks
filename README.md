@@ -7,15 +7,15 @@
 
 A sample blockchain data structure implementation in C# w/ data persistence.
 
+Start a new node:
+
 ```
 blocks --port 8000
 ```
 
 ```
-curl http://localhost:8000/blocks
-```
+Validating blockchain: Genesis
 
-```
 Hash: 27412103ae0823aa9fc40cde0445fc48e358be206ca8a28b5915aeb5012159f5
 Previous: 81ddc8d248b2dccdd3fdd5e84f0cad62b08f2d10b57f9a831c13451e5c5c80a5
 No: 0
@@ -23,12 +23,28 @@ Timestamp: 10/20/2017 7:54:39 PM
 Nonce: 1744414568
 Verified: True
 Genesis: True
+
+Starting a new node
+
+Ready.
+
+http://localhost:8000
+
+Press any key to quit...
 ```
 
-## Links
+Get the latest block:
 
-[The ABA Problem](https://en.wikipedia.org/wiki/ABA_problem)
+```
+curl -X GET http://localhost:8000/
+```
 
-[Non-Blocking and Blocking Concurrent Algorithms](http://www.research.ibm.com/people/m/michael/podc-1996.pdf)
-
-Inpsired by - [A blockchain in 200 lines of code](https://medium.com/@lhartikk/a-blockchain-in-200-lines-of-code-963cc1cc0e54)
+```
+{
+	hash: "27412103ae0823aa9fc40cde0445fc48e358be206ca8a28b5915aeb5012159f5",
+	previous: "81ddc8d248b2dccdd3fdd5e84f0cad62b08f2d10b57f9a831c13451e5c5c80a5",
+	no: 0,
+	timestamp: "10/20/2017 7:54:39 PM",
+	nonce: 1744414568,
+}
+```

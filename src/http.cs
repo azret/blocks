@@ -6,7 +6,7 @@ namespace Blocks
 {
     public static class Serv
     {
-        static Task Text(Microsoft.Owin.IOwinContext ctx, string text)
+        static void Cors(Microsoft.Owin.IOwinContext ctx)
         {
             ctx.Response.Headers.Set("Cache-Control", "no-cache, no-store, must-revalidate");
             ctx.Response.Headers.Set("Pragma", "no-cache");
@@ -17,32 +17,94 @@ namespace Blocks
             ctx.Response.Headers.Set("Access-Control-Allow-Methods", "*");
 
             ctx.Response.Headers.Set("X-Content-Type-Options", "nosniff");
+        }
 
-            ctx.Response.ContentType = "text/plain";
+        static Task OK(Microsoft.Owin.IOwinContext ctx, string data)
+        {
             ctx.Response.StatusCode = 200;
 
-            ctx.Response.Write(text);
+            if (!string.IsNullOrWhiteSpace(data))
+            {
+                ctx.Response.ContentType = "text/plain";
+                return ctx.Response.WriteAsync(data);
+            }
 
             return Task.CompletedTask;
         }
 
-        public unsafe static Task Blocks(Microsoft.Owin.IOwinContext ctx)
+        static Task JSON(Microsoft.Owin.IOwinContext ctx, string data)
         {
-            var buffer = new StringBuilder();
+            ctx.Response.StatusCode = 200;
 
-            using (System.IO.TextWriter writer = new StringWriter(buffer))
+            if (!string.IsNullOrWhiteSpace(data))
+            {
+                ctx.Response.ContentType = "application/json";
+                return ctx.Response.WriteAsync(data);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        static Task Error(Microsoft.Owin.IOwinContext ctx, int statusCode = 500, string data = null)
+        {
+            if (statusCode == 200)
+            {
+                throw new System.ArgumentOutOfRangeException();
+            }
+
+            ctx.Response.StatusCode = statusCode;
+
+            if (!string.IsNullOrWhiteSpace(data))
+            {
+                ctx.Response.ContentType = "text/plain";
+                ctx.Response.Write(data);
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public unsafe static Task GetBlocks(Microsoft.Owin.IOwinContext ctx)
+        {
+            Cors(ctx);
+
+            var plain = new StringBuilder();
+
+            using (System.IO.TextWriter dst = new StringWriter(plain))
             {
                 Database.Map(App.FILE, (i) =>
                 {
                     Block* block = (Block*)i;
 
-                    Database.Print(
+                    Utils.Print(
                             block, 
-                            writer);
+                            dst);
                 });
             }
 
-            return Text(ctx, buffer.ToString());            
+            return OK(ctx, plain.ToString());            
+        }
+
+        public unsafe static Task GetLatestBlock(Microsoft.Owin.IOwinContext ctx)
+        {            
+            Block block;
+
+            if (!Database.GetLatestBlock(App.FILE, &block))
+            {
+                return Error(ctx);
+            }
+
+            Cors(ctx);
+
+            var json = new StringBuilder();
+
+            using (System.IO.TextWriter dst = new StringWriter(json))
+            {
+                Utils.JSON(
+                        &block,
+                        dst);
+            }
+
+            return JSON(ctx, json.ToString());
         }
     }
 }

@@ -50,7 +50,23 @@ namespace Blocks
         /// data
         /// </summary>
         public fixed byte data[MAX];
-        
+
+        /// <summary>
+        /// GetPreviousHash()
+        /// </summary>
+        public byte[] GetPreviousHash()
+        {
+            byte[] tmp = new byte[32];
+            fixed (byte* p = previous)
+            {
+                for (var i = 0; i < 32; i++)
+                {
+                    tmp[i] = p[i];
+                }
+            }
+            return tmp;
+        }
+
         /// <summary>
         /// GetHash()
         /// </summary>
@@ -91,86 +107,6 @@ namespace Blocks
 
     public static unsafe class Database
     {
-        internal static class Kernel
-        {
-            internal static IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
-
-            [StructLayout(LayoutKind.Sequential)]
-            internal class SECURITY_ATTRIBUTES
-            {
-                internal int nLength;
-                internal unsafe byte* pSecurityDescriptor;
-                internal int bInheritHandle;
-            }
-
-            [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
-            [DllImport("Kernel32.dll", SetLastError = false)]
-            internal static extern int GetLastError();
-
-            [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
-            [DllImport("Kernel32.dll", SetLastError = false)]
-            internal static extern void SetLastError(int lastError);
-
-            [DllImport("Kernel32.dll", BestFitMapping = false, SetLastError = true, CharSet = CharSet.Unicode)]
-            internal static extern IntPtr CreateFile(
-                String lpFileName,
-                UInt32 dwDesiredAccess,
-                UInt32 dwShareMode,
-                SECURITY_ATTRIBUTES lpSecurityAttributes,
-                UInt32 dwCreationDisposition,
-                UInt32 dwFlagsAndAttributes,
-                IntPtr hTemplateFile);
-
-            [DllImport("Kernel32.dll", SetLastError = true)]
-            internal unsafe static extern bool WriteFile(
-                IntPtr hFile,
-                IntPtr lpBuffer,
-                int nNumberOfBytesToWrite,
-                out int lpNumberOfBytesWritten,
-                IntPtr lpOverlapped);
-
-            [DllImport("Kernel32.dll", SetLastError = false)]
-            internal static extern bool CloseHandle(
-                 IntPtr hObject
-            );
-
-            internal enum SEEK : uint
-            {
-                FROM_START = 0,
-                FROM_CURRENT = 1,
-                FROM_END = 2
-            }
-
-            [DllImport("Kernel32.dll", SetLastError = true, EntryPoint = "SetFilePointer")]
-            internal unsafe static extern int SetFilePointerWin32(IntPtr h_File, int lo, int* hi, uint origin);
-
-            internal unsafe static long SetFilePointer(IntPtr h_File, long offset, SEEK seek, out int hr)
-            {
-                hr = 0;
-
-                int lo = (int)offset;
-                int hi = (int)(offset >> 32);
-
-                lo = SetFilePointerWin32(h_File, lo, &hi, (uint)seek);
-
-                if (lo == -1 && ((hr = Marshal.GetLastWin32Error()) != 0))
-                    return -1;
-
-                return (long)(((ulong)((uint)hi)) << 32) | ((uint)lo);
-            }
-
-            [DllImport("Kernel32.dll", SetLastError = true)]
-            internal unsafe static extern bool ReadFile(
-                    IntPtr hFile,
-                    byte* lpBuffer,
-                    int nNumberOfBytesToRead,
-                    out int lpNumberOfBytesRead,
-                    void* overlapped);
-        }
-
-        /// <summary>
-        /// Hash of the Genesis block
-        /// </summary>
         public static byte[] Genesis = Sign(System.Text.Encoding.ASCII.GetBytes("Genesis"));
 
         public static unsafe void Copy(byte* dst, byte* src, int count)
@@ -179,33 +115,6 @@ namespace Blocks
             {
                 dst[i] = src[i];
             }
-        }
-
-        public static unsafe string Hex(byte[] value, int len = -1)
-        {
-            if (len < 0)
-            {
-                len = value.Length;
-            }
-            var hex = new System.Text.StringBuilder();
-            for (int i = 0; i < len; i++)
-            {
-                hex.Append(value[i].ToString("x2"));
-            }
-            return hex.ToString();
-        }
-
-        public static unsafe byte[] GetPreviousHash(Block* block)
-        {
-            byte[] tmp = new byte[32];
-            byte* p = block->previous;
-            {
-                for (var i = 0; i < 32; i++)
-                {
-                    tmp[i] = p[i];
-                }
-            }
-            return tmp;
         }
 
         public static unsafe byte[] Sign(byte[] value)
@@ -341,7 +250,7 @@ namespace Blocks
 
             if (previous != null)
             {
-                if (!Compare(GetPreviousHash(src), previous))
+                if (!Compare(src->GetPreviousHash(), previous))
                 {
                     return false;
                 }
@@ -352,7 +261,7 @@ namespace Blocks
 
         public static unsafe bool IsGenesis(Block* src)
         {
-            if (Compare(GetPreviousHash(src), Genesis))
+            if (Compare(src->GetPreviousHash(), Genesis))
             {
                 return true;
             }
@@ -507,11 +416,9 @@ namespace Blocks
             {
                 if (hFile == IntPtr.Zero || hFile == Kernel.INVALID_HANDLE_VALUE)
                 {
-                    const uint GENERIC_READ = 0x80000000;
-
                     hFile = Kernel.CreateFile(
                               file,
-                              GENERIC_READ,
+                              0x80000000 /* GENERIC_READ */,
                               0x00000001 | 0x00000002 /* FILE_SHARE_READ | FILE_SHARE_WRITE */,
                               null,
                               0x04 /* OPEN_ALWAYS */,
@@ -647,39 +554,6 @@ L0:
             }
         }
         
-        public static unsafe void Print(Block* src, TextWriter writer)
-        {
-            writer.WriteLine($"Hash: {Hex(src->GetHash())}");
-
-            writer.WriteLine($"Previous: {Hex(GetPreviousHash(src))}");
-
-            if (src->len > 0)
-            {
-                writer.WriteLine($"Data: {Hex(src->GetData())}");
-            }
-
-            int no = src->no;
-
-            writer.WriteLine($"No: {no}");
-
-            var timestamp = src->timestamp;
-
-            writer.WriteLine($"Timestamp: {(new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).AddSeconds(timestamp).ToLocalTime()}");
-
-            var nonce = src->nonce;
-
-            writer.WriteLine($"Nonce: {nonce}");
-
-            writer.WriteLine($"Verified: {IsValidBlock(src, null)}");
-
-            if (IsGenesis(src))
-            {
-                writer.WriteLine($"Genesis: {true}");
-            }
-
-            writer.WriteLine();
-        }
-
         public static System.Random Seed = new System.Random(7919);
 
         public static byte[] Data()
@@ -691,6 +565,165 @@ L0:
         {
             return Seed.Next();
         }
+    }
 
+    public static partial class Utils
+    {
+        public static unsafe string Hex(byte[] value, int len = -1)
+        {
+            if (len < 0)
+            {
+                len = value.Length;
+            }
+
+            var hex = new System.Text.StringBuilder();
+
+            for (int i = 0; i < len; i++)
+            {
+                hex.Append(value[i].ToString("x2"));
+            }
+
+            return hex.ToString();
+        }
+
+        public static unsafe void JSON(Block* src, TextWriter dst)
+        {
+            const string INDENT = "\t";
+
+            dst.WriteLine($"{{");
+
+            dst.WriteLine($"{INDENT}hash: \"{Hex(src->GetHash())}\",");
+
+            dst.WriteLine($"{INDENT}previous: \"{Hex(src->GetPreviousHash())}\",");
+
+            if (src->len > 0)
+            {
+                dst.WriteLine($"{INDENT}data: \"{Hex(src->GetData())}\",");
+            }
+
+            int no = src->no;
+
+            dst.WriteLine($"{INDENT}no: {no},");
+
+            var timestamp = src->timestamp;
+
+            dst.WriteLine($"{INDENT}timestamp: \"{(new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).AddSeconds(timestamp).ToLocalTime()}\",");
+
+            var nonce = src->nonce;
+
+            dst.WriteLine($"{INDENT}nonce: \"{nonce}\",");
+
+            dst.WriteLine($"}}");
+        }
+
+        public static unsafe void Print(Block* src, TextWriter dst)
+        {
+            dst.WriteLine($"Hash: {Hex(src->GetHash())}");
+
+            dst.WriteLine($"Previous: {Hex(src->GetPreviousHash())}");
+
+            if (src->len > 0)
+            {
+                dst.WriteLine($"Data: {Hex(src->GetData())}");
+            }
+
+            int no = src->no;
+
+            dst.WriteLine($"No: {no}");
+
+            var timestamp = src->timestamp;
+
+            dst.WriteLine($"Timestamp: {(new System.DateTime(1970, 1, 1, 0, 0, 0, 0, System.DateTimeKind.Utc)).AddSeconds(timestamp).ToLocalTime()}");
+
+            var nonce = src->nonce;
+
+            dst.WriteLine($"Nonce: {nonce}");
+
+            dst.WriteLine($"Verified: {Database.IsValidBlock(src, null)}");
+
+            if (Database.IsGenesis(src))
+            {
+                dst.WriteLine($"Genesis: {true}");
+            }
+
+            dst.WriteLine();
+        }
+    }
+
+    internal static class Kernel
+    {
+        internal static IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal class SECURITY_ATTRIBUTES
+        {
+            internal int nLength;
+            internal unsafe byte* pSecurityDescriptor;
+            internal int bInheritHandle;
+        }
+
+        [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
+        [DllImport("Kernel32.dll", SetLastError = false)]
+        internal static extern int GetLastError();
+
+        [ReliabilityContract(Consistency.WillNotCorruptState, Cer.Success)]
+        [DllImport("Kernel32.dll", SetLastError = false)]
+        internal static extern void SetLastError(int lastError);
+
+        [DllImport("Kernel32.dll", BestFitMapping = false, SetLastError = true, CharSet = CharSet.Unicode)]
+        internal static extern IntPtr CreateFile(
+            String lpFileName,
+            UInt32 dwDesiredAccess,
+            UInt32 dwShareMode,
+            SECURITY_ATTRIBUTES lpSecurityAttributes,
+            UInt32 dwCreationDisposition,
+            UInt32 dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
+
+        [DllImport("Kernel32.dll", SetLastError = true)]
+        internal unsafe static extern bool WriteFile(
+            IntPtr hFile,
+            IntPtr lpBuffer,
+            int nNumberOfBytesToWrite,
+            out int lpNumberOfBytesWritten,
+            IntPtr lpOverlapped);
+
+        [DllImport("Kernel32.dll", SetLastError = false)]
+        internal static extern bool CloseHandle(
+             IntPtr hObject
+        );
+
+        internal enum SEEK : uint
+        {
+            FROM_START = 0,
+            FROM_CURRENT = 1,
+            FROM_END = 2
+        }
+
+        [DllImport("Kernel32.dll", SetLastError = true, EntryPoint = "SetFilePointer")]
+        internal unsafe static extern int SetFilePointerWin32(IntPtr h_File, int lo, int* hi, uint origin);
+
+        internal unsafe static long SetFilePointer(IntPtr h_File, long offset, SEEK seek, out int hr)
+        {
+            hr = 0;
+
+            int lo = (int)offset;
+            int hi = (int)(offset >> 32);
+
+            lo = SetFilePointerWin32(h_File, lo, &hi, (uint)seek);
+
+            if (lo == -1 && ((hr = Marshal.GetLastWin32Error()) != 0))
+                return -1;
+
+            return (long)(((ulong)((uint)hi)) << 32) | ((uint)lo);
+        }
+
+        [DllImport("Kernel32.dll", SetLastError = true)]
+        internal unsafe static extern bool ReadFile(
+                IntPtr hFile,
+                byte* lpBuffer,
+                int nNumberOfBytesToRead,
+                out int lpNumberOfBytesRead,
+                void* overlapped);
     }
 }

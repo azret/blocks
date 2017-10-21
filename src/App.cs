@@ -1,75 +1,89 @@
-﻿using System;
-using System.Diagnostics;
-using System.Threading.Tasks;
+﻿using Microsoft.Owin;
+using Owin;
+using System;
 
-using static Blocks;
-
-class App
+namespace Blocks
 {
-    public static unsafe void Main(string[] args)
+    class App
     {
-        string FILE = "Genesis";
+        static IDisposable _listener;
 
-        Block GenesisBlock;
-
-        // Create a new file if needed ...
-
-        if (!GetLatestBlock(FILE, &GenesisBlock))
+        static void Log(string msg)
         {
-            GenesisBlock = CreateBlock(0, Genesis, Seed.Next(), null);
-
-            Debug.Assert(IsGenesis(&GenesisBlock));
-
-            if (AppendBlock(FILE, &GenesisBlock) <= 0)
-            {
-                Console.Error?.WriteLine("Could not create genesis block.");
-            }
+            Console.WriteLine(msg);
         }
 
-        // Generate new blocks ...
-
-        Parallel.For(0, 7, (i) =>
+        public static void Serv<TStartup>(int port)
         {
-            Block LatestBlock;
-
-            if (GetLatestBlock(FILE, &LatestBlock))
+            if (_listener != null)
             {
-                var NewBlock = CreateBlock(LatestBlock.no + 1, LatestBlock.GetHash(), Blocks.Nonce(), Data());
-
-                if (AppendBlock(FILE, &NewBlock) <= 0)
-                {
-                    // Block is rejected. Try again.
-                }
+                throw new InvalidOperationException();
             }
-        });
 
-        // Check data consistency ...
+            Log($"Staring http://localhost:{port}");
 
-        byte[] tmp = null;
+            _listener = Microsoft.Owin.Hosting.WebApp.Start<TStartup>(url: $"http://+:{port}");
 
-        Map(FILE, (i) =>
+            Log($"\r\nReady.");
+        }
+
+        public void Configuration(Owin.IAppBuilder host)
         {
-            Block* b = (Block*)i;
-
-            fixed (byte* p = tmp)
+            Owin.MapExtensions.Map(host, string.Empty, (app) =>
             {
-                if (IsValidBlock(b, p))
+                app.Run((IOwinContext ctx) => { return Blocks.Serv.Welcome(ctx); });
+            });
+        }
+
+        public static unsafe void Main(string[] args)
+        {
+            int? ExitCode = null;
+
+            System.Console.CancelKeyPress += (sender, e) =>
+            {
+                e.Cancel = true;
+            };
+
+            int port = 8000;
+
+            try
+            {
+                Serv<App>(port);
+            }
+            catch (Exception e)
+            {
+                System.Net.HttpListenerException error = e as System.Net.HttpListenerException;
+
+                if (error == null)
                 {
-                    Console.ForegroundColor = ConsoleColor.Green;
+                    error = e.InnerException as System.Net.HttpListenerException;
+                }
+
+                if (error != null && error.NativeErrorCode == 0x5)
+                {
+                    Log($"\r\n{error.Message}");
+
+                    Log($"\r\nUse: netsh http add urlacl url = http://+:{port}/ user=everyone listen=yes");
                 }
                 else
                 {
-                    Console.ForegroundColor = ConsoleColor.Red;
+                    if (e.InnerException != null) throw e.InnerException;
+
+                    throw e;
                 }
             }
+            
+            Log("\r\nPress any key to quit...\r\n");
 
-            Print(b, System.Console.Out);
-
-            Console.ResetColor();
-
-            tmp = b->GetHash();
-        });
-
-        System.Console.ReadKey();
+            while (!ExitCode.HasValue)
+            {
+                ConsoleKeyInfo cki = System.Console.ReadKey(true);
+                if (true || cki.Modifiers.HasFlag(ConsoleModifiers.Control)
+    && cki.Key == ConsoleKey.C)
+                {
+                    ExitCode = 0;
+                }
+            }
+        }
     }
 }

@@ -118,13 +118,20 @@ namespace Blocks
                         Console.ForegroundColor = ConsoleColor.Red;
                     }
                 }
-
+                /*
                 Database.Print(b, System.Console.Out);
-
+                */
                 Console.ResetColor();
 
                 previous = b->GetHash();
             });
+
+            if (!Database.GetLatestBlock(FILE, &block))
+            {
+                Error($"Could not get latest block.");
+            }
+            
+            Database.Print(&block, System.Console.Out);
 
             Log($"Done.\r\n");
 

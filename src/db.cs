@@ -606,7 +606,8 @@ namespace Blocks
                     }
                 }
 
-                L0:
+L0:
+
                 Block previous; int read = 0;
 
                 bool ok = Kernel.ReadFile(hFile, (byte*)(&previous), 1024, out read, null);
@@ -645,7 +646,7 @@ namespace Blocks
                 }
             }
         }
-
+        
         public static unsafe void Print(Block* src, TextWriter writer)
         {
             writer.WriteLine($"Hash: {Hex(src->GetHash())}");

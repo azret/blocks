@@ -60,9 +60,9 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="app.cs" />
+    <Compile Include="start.cs" />
     <Compile Include="db.cs" />
-    <Compile Include="serv.cs" />
+    <Compile Include="http.cs" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Properties\" />

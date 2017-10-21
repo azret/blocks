@@ -7,7 +7,7 @@
 
 A sample blockchain data structure implementation in C# w/ data persistence.
 
-Start a new node:
+## Starting a new node
 
 ```
 blocks --port 8000
@@ -24,8 +24,6 @@ Nonce: 1744414568
 Verified: True
 Genesis: True
 
-Starting a new node
-
 Ready.
 
 http://localhost:8000
@@ -33,7 +31,7 @@ http://localhost:8000
 Press any key to quit...
 ```
 
-Get the latest block:
+## Get the latest block
 
 ```
 curl -X GET http://localhost:8000/

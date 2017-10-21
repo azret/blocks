@@ -4,23 +4,41 @@ using System;
 
 namespace Blocks
 {
-    class App
+    public class App
     {
+        public static string FILE = "Genesis";
+
         static IDisposable _listener;
 
         static void Log(string msg)
         {
+            Console.ForegroundColor = ConsoleColor.Gray;
             Console.WriteLine(msg);
+            Console.ResetColor();
         }
 
-        public static void Serv<TStartup>(int port)
+        static void Error(string msg)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine(msg);
+            Console.ResetColor();
+        }
+
+        static void Yellow(string msg)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine(msg);
+            Console.ResetColor();
+        }
+
+        static void Serv<TStartup>(int port)
         {
             if (_listener != null)
             {
                 throw new InvalidOperationException();
             }
 
-            Log($"Staring http://localhost:{port}");
+            Log($"Starting a new node on http://localhost:{port}");
 
             _listener = Microsoft.Owin.Hosting.WebApp.Start<TStartup>(url: $"http://+:{port}");
 
@@ -29,14 +47,29 @@ namespace Blocks
 
         public void Configuration(Owin.IAppBuilder host)
         {
+            Owin.MapExtensions.Map(host, "/blocks", (app) =>
+            {
+                app.Run((IOwinContext ctx) => { return Blocks.Serv.Blocks(ctx); });
+            });
+
             Owin.MapExtensions.Map(host, string.Empty, (app) =>
             {
-                app.Run((IOwinContext ctx) => { return Blocks.Serv.Welcome(ctx); });
+                app.Run((IOwinContext ctx) => { return Blocks.Serv.Blocks(ctx); });
             });
         }
 
-        public static unsafe void Main(string[] args)
+        static unsafe void Main(string[] args)
         {
+            int PORT = 8000;
+
+            try
+            {
+                Console.Title = $"Node ({PORT})";
+            }
+            catch
+            {
+            }
+
             int? ExitCode = null;
 
             System.Console.CancelKeyPress += (sender, e) =>
@@ -44,11 +77,60 @@ namespace Blocks
                 e.Cancel = true;
             };
 
-            int port = 8000;
+            Block block;
+
+            Log($"Validating database...\r\n");
+
+            if (!Database.GetLatestBlock(FILE, &block))
+            {
+                block = Database.CreateBlock(0, Database.Genesis, Database.Seed.Next(), null);
+
+                System.Diagnostics.Debug.Assert(Database.IsGenesis(&block));
+
+                if (Database.AppendBlock(FILE, &block) <= 0)
+                {
+                    Error($"Could not create genesis block.");
+                }
+            }
+
+            byte[] previous = null;
+
+            Database.Map(FILE, (i) =>
+            {
+                Block* b = (Block*)i;
+
+                fixed (byte* p = previous)
+                {
+                    if (Database.IsValidBlock(b, p))
+                    {
+                        Console.ForegroundColor = ConsoleColor.Green;
+
+                        if (p == null)
+                        {
+                            if (!Database.IsGenesis(b))
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                    }
+                }
+
+                Database.Print(b, System.Console.Out);
+
+                Console.ResetColor();
+
+                previous = b->GetHash();
+            });
+
+            Log($"Done.\r\n");
 
             try
             {
-                Serv<App>(port);
+                Serv<App>(PORT);
             }
             catch (Exception e)
             {
@@ -61,9 +143,9 @@ namespace Blocks
 
                 if (error != null && error.NativeErrorCode == 0x5)
                 {
-                    Log($"\r\n{error.Message}");
+                    Error($"\r\n{error.Message}");
 
-                    Log($"\r\nUse: netsh http add urlacl url = http://+:{port}/ user=everyone listen=yes");
+                    Yellow($"\r\nUse: netsh http add urlacl url = http://+:{PORT}/ user=everyone listen=yes");
                 }
                 else
                 {
@@ -78,8 +160,8 @@ namespace Blocks
             while (!ExitCode.HasValue)
             {
                 ConsoleKeyInfo cki = System.Console.ReadKey(true);
-                if (true || cki.Modifiers.HasFlag(ConsoleModifiers.Control)
-    && cki.Key == ConsoleKey.C)
+
+                if (true || cki.Modifiers.HasFlag(ConsoleModifiers.Control) && cki.Key == ConsoleKey.C)
                 {
                     ExitCode = 0;
                 }

@@ -8,6 +8,87 @@ using System.Threading;
 
 namespace Blocks
 {
+    /// <summary>
+    /// 1024 byte block structure
+    /// </summary>
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1, Size = 1024)]
+    public unsafe struct Block
+    {
+        public const int MAX = 1024 - 32 - 32 - 4 - 4 - 4 - 8;
+
+        /// <summary>
+        /// previous
+        /// </summary>
+        public fixed byte previous[32]; // 32 bytes
+        
+        /// <summary>
+        /// hash
+        /// </summary>
+        public fixed byte hash[32]; // 32 bytes
+                                    
+        /// <summary>
+        /// len
+        /// </summary>
+        public int len; // 4 bytes
+                
+        /// <summary>
+        /// nonce
+        /// </summary>
+        public int nonce; // 4 bytes
+        
+        /// <summary>
+        /// no
+        /// </summary>
+        public int no; // 4 bytes 
+        
+        /// <summary>
+        /// timestamp
+        /// </summary>
+        public double timestamp; // 8 bytes
+        
+        /// <summary>
+        /// data
+        /// </summary>
+        public fixed byte data[MAX];
+        
+        /// <summary>
+        /// GetHash()
+        /// </summary>
+        public byte[] GetHash()
+        {
+            byte[] tmp = new byte[32];
+            fixed (byte* p = hash)
+            {
+                for (var i = 0; i < 32; i++)
+                {
+                    tmp[i] = p[i];
+                }
+            }
+            return tmp;
+        }
+
+        /// <summary>
+        /// GetData()
+        /// </summary>
+        public byte[] GetData()
+        {
+            var size = len;
+            if (size > MAX)
+            {
+                size = MAX;
+            }
+            byte[] tmp = new byte[size];
+            fixed (byte* p = data)
+            {
+                for (var i = 0; i < size; i++)
+                {
+                    tmp[i] = p[i];
+                }
+            }
+            return tmp;
+        }
+    }
+
     public static unsafe class Database
     {
         internal static class Kernel
@@ -91,78 +172,6 @@ namespace Blocks
         /// Hash of the Genesis block
         /// </summary>
         public static byte[] Genesis = Sign(System.Text.Encoding.ASCII.GetBytes("Genesis"));
-
-        /// <summary>
-        /// 1024 byte block structure
-        /// </summary>
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1, Size = 1024)]
-        public unsafe struct Block
-        {
-            public const int MAX = 1024 - 32 - 32 - 4 - 4 - 4 - 8;
-            /// <summary>
-            /// previous
-            /// </summary>
-            public fixed byte previous[32]; // 32 bytes
-                                            /// <summary>
-                                            /// hash
-                                            /// </summary>
-            public fixed byte hash[32]; // 32 bytes
-                                        /// <summary>
-                                        /// len
-                                        /// </summary>
-            public int len; // 4 bytes
-                            /// <summary>
-                            /// nonce
-                            /// </summary>
-            public int nonce; // 4 bytes
-                              /// <summary>
-                              /// no
-                              /// </summary>
-            public int no; // 4 bytes 
-                           /// <summary>
-                           /// timestamp
-                           /// </summary>
-            public double timestamp; // 8 bytes
-                                     /// <summary>
-                                     /// data
-                                     /// </summary>
-            public fixed byte data[MAX];
-            /// <summary>
-            /// GetHash()
-            /// </summary>
-            public byte[] GetHash()
-            {
-                byte[] tmp = new byte[32];
-                fixed (byte* p = hash)
-                {
-                    for (var i = 0; i < 32; i++)
-                    {
-                        tmp[i] = p[i];
-                    }
-                }
-                return tmp;
-            }
-            /// <summary>
-            /// GetData()
-            /// </summary>
-            public byte[] GetData()
-            {
-                var size = len;
-                if (size > MAX)
-                {
-                    size = MAX;
-                }
-                byte[] tmp = new byte[size];
-                fixed (byte* p = data)
-                {
-                    for (var i = 0; i < size; i++)
-                    {
-                        tmp[i] = p[i];
-                    }
-                }
-                return tmp;
-            }
-        }
 
         public static unsafe void Copy(byte* dst, byte* src, int count)
         {

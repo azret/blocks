@@ -1,6 +1,8 @@
 ﻿using Microsoft.Owin;
 using Owin;
 using System;
+using System.Diagnostics;
+using System.Net.Sockets;
 
 namespace Blocks
 {
@@ -50,6 +52,11 @@ namespace Blocks
 
         public void Configuration(Owin.IAppBuilder host)
         {
+            Owin.MapExtensions.Map(host, "/connect", (app) =>
+            {
+                app.Run((IOwinContext ctx) => { return System.Web.WebSocks.Connect(ctx); });
+            });             
+
             Owin.MapExtensions.Map(host, "/blocks", (app) =>
             {
                 app.Run((IOwinContext ctx) => { return Blocks.Serv.GetBlocks(ctx); });

@@ -60,9 +60,11 @@
     <Reference Include="System" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="src\start.cs" />
+    <Compile Include="src\node.cs" />
+    <Compile Include="src\app.cs" />
     <Compile Include="src\db.cs" />
     <Compile Include="src\http.cs" />
+    <Compile Include="src\ws.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\app.config" />

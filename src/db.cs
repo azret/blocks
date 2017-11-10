@@ -9,13 +9,11 @@ using System.Threading;
 namespace Blocks
 {
     /// <summary>
-    /// 1024 byte block structure
+    /// 1 KB block structure
     /// </summary>
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, Pack = 1, Size = 1024)]
     public unsafe struct Block
     {
-        public const int MAX = 1024 - 32 - 32 - 4 - 4 - 4 - 8;
-
         /// <summary>
         /// previous
         /// </summary>
@@ -49,22 +47,24 @@ namespace Blocks
         /// <summary>
         /// data
         /// </summary>
-        public fixed byte data[MAX];
+        public fixed byte data[940]; // 940 bytes
 
         /// <summary>
         /// GetPreviousHash()
         /// </summary>
         public byte[] GetPreviousHash()
         {
-            byte[] tmp = new byte[32];
+            byte[] dst = new byte[32];
+
             fixed (byte* p = previous)
             {
                 for (var i = 0; i < 32; i++)
                 {
-                    tmp[i] = p[i];
+                    dst[i] = p[i];
                 }
             }
-            return tmp;
+
+            return dst;
         }
 
         /// <summary>
@@ -72,15 +72,17 @@ namespace Blocks
         /// </summary>
         public byte[] GetHash()
         {
-            byte[] tmp = new byte[32];
+            byte[] dst = new byte[32];
+
             fixed (byte* p = hash)
             {
                 for (var i = 0; i < 32; i++)
                 {
-                    tmp[i] = p[i];
+                    dst[i] = p[i];
                 }
             }
-            return tmp;
+
+            return dst;
         }
 
         /// <summary>
@@ -89,26 +91,28 @@ namespace Blocks
         public byte[] GetData()
         {
             var size = len;
-            if (size > MAX)
+
+            if (size > 940)
             {
-                size = MAX;
+                size = 940;
             }
-            byte[] tmp = new byte[size];
+
+            byte[] dst = new byte[size];
+
             fixed (byte* p = data)
             {
                 for (var i = 0; i < size; i++)
                 {
-                    tmp[i] = p[i];
+                    dst[i] = p[i];
                 }
             }
-            return tmp;
+
+            return dst;
         }
-    }
 
-    public static unsafe class Database
-    {
-        public static byte[] Genesis = Sign(System.Text.Encoding.ASCII.GetBytes("Genesis"));
-
+        /// <summary>
+        /// Copy a block one byte at a time
+        /// </summary>
         public static unsafe void Copy(byte* dst, byte* src, int count)
         {
             for (int i = 0; i < count; i++)
@@ -117,56 +121,70 @@ namespace Blocks
             }
         }
 
-        public static unsafe byte[] Sign(byte[] value)
+        /// <summary>
+        /// Signs a block
+        /// </summary>
+        public static unsafe byte[] Sign(byte[] src)
         {
             System.Security.Cryptography.SHA256 sha256 = System.Security.Cryptography.SHA256.Create();
             try
             {
-                return sha256.ComputeHash(value);
+                return sha256.ComputeHash(src);
             }
             finally
             {
                 sha256.Dispose();
             }
         }
+    }
+
+    public static unsafe class Database
+    {
+        public static byte[] Genesis = Block.Sign(System.Text.Encoding.ASCII.GetBytes("Genesis"));
 
         public static unsafe byte[] CreateBlock(Block* src, bool unhash)
         {
             byte[] buf = new byte[1024];
+
             Block tmp = *src;
+
             if (unhash)
             {
                 byte* p = tmp.hash;
+
+                for (int i = 0; i < 32; i++)
                 {
-                    for (int i = 0; i < 32; i++)
-                    {
-                        p[i] = 0;
-                    }
+                    p[i] = 0;
                 }
             }
+
             fixed (byte* p = buf)
             {
                 byte* s = (byte*)&tmp;
+
                 for (int i = 0; i < 1024; i++)
                 {
                     p[i] = s[i];
                 }
             }
+
             return buf;
         }
 
         public static unsafe Block CreateBlock(byte[] block)
         {
-            Block tmp = new Block();
+            Block dst = new Block();
+
             fixed (byte* p = block)
             {
-                byte* s = (byte*)&tmp;
+                byte* s = (byte*)&dst;
                 for (int i = 0; i < 1024; i++)
                 {
                     p[i] = s[i];
                 }
             }
-            return tmp;
+
+            return dst;
         }
 
         public static unsafe Block CreateBlock(int no, byte[] previous, int nonce, byte[] data)
@@ -186,31 +204,31 @@ namespace Blocks
 
             fixed (byte* p = previous)
             {
-                Copy(block.previous, p, 32);
+                Block.Copy(block.previous, p, 32);
             }
 
             if (data != null)
             {
                 block.len = data.Length;
 
-                if (block.len > Block.MAX)
+                if (block.len > 940)
                 {
                     throw new System.ArgumentOutOfRangeException("data", "Invalid data size.");
                 }
 
                 fixed (byte* p = data)
                 {
-                    Copy(block.data, p, block.len);
+                    Block.Copy(block.data, p, block.len);
                 }
             }
 
             block.timestamp = (int)t.TotalSeconds;
 
-            byte[] hash = Sign(CreateBlock(&block, false));
+            byte[] hash = Block.Sign(CreateBlock(&block, false));
 
             fixed (byte* p = hash)
             {
-                Copy(block.hash, p, 32);
+                Block.Copy(block.hash, p, 32);
             }
 
             return block;
@@ -219,18 +237,28 @@ namespace Blocks
         public static bool Compare(byte[] a, byte[] b)
         {
             if (a.Length != b.Length)
+            {
                 return false;
+            }
             for (int i = 0; i < a.Length; i++)
+            {
                 if (a[i] != b[i])
+                {
                     return false;
+                }
+            }
             return true;
         }
 
         public static unsafe bool Compare(byte[] a, byte* b)
         {
             for (int i = 0; i < a.Length; i++)
+            {
                 if (a[i] != b[i])
+                {
                     return false;
+                }
+            }
             return true;
         }
 
@@ -243,7 +271,7 @@ namespace Blocks
 
             byte[] hash = src->GetHash();
 
-            if (!Compare(Sign(CreateBlock(src, true)), hash))
+            if (!Compare(Block.Sign(CreateBlock(src, true)), hash))
             {
                 return false;
             }
@@ -288,24 +316,21 @@ namespace Blocks
                 throw new System.ArgumentNullException("file", "File name is not specified.");
             }
 
-            int @try = 0;
+            int attempts = 0;
 
             try
             {
                 int error;
-
-                const uint GENERIC_READ = 0x80000000;
-                const uint GENERIC_WRITE = 0x40000000;
-
+                
                 /* Obtain an exclusive write lock on a file */
 
                 while (hFile == IntPtr.Zero || hFile == Kernel.INVALID_HANDLE_VALUE)
                 {
-                    @try++;
+                    attempts++;
 
                     hFile = Kernel.CreateFile(
                           file,
-                          GENERIC_READ | GENERIC_WRITE,
+                          0x80000000 | 0x40000000 /* GENERIC_READ | GENERIC_WRITE */,
                           0x00000001 /* FILE_SHARE_READ */,
                           null,
                           0x04 /* OPEN_ALWAYS */,
@@ -316,7 +341,7 @@ namespace Blocks
                     {
                         error = Kernel.GetLastError();
 
-                        if (error == 32 && @try < retry)
+                        if (error == 32 && attempts < retry)
                         {
                             Thread.Sleep(0);
                             continue;
@@ -382,9 +407,9 @@ namespace Blocks
                     throw new Win32Exception(Kernel.GetLastError());
                 }
 
-                Debug.Assert(@try > 0);
+                Debug.Assert(attempts > 0);
 
-                return @try;
+                return attempts;
 
             }
             finally
